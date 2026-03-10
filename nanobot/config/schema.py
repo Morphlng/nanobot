@@ -188,6 +188,33 @@ class SlackConfig(Base):
     dm: SlackDMConfig = Field(default_factory=SlackDMConfig)
 
 
+class DChatDMConfig(Base):
+    """DChat DM policy configuration."""
+
+    policy: Literal["open", "allowlist", "disabled"] = "open"
+    allow_from: list[str] = Field(default_factory=list)
+
+
+class DChatOutboundConfig(Base):
+    """DChat outbound API configuration."""
+
+    url: str = ""
+    username: str = ""
+    password: str = ""
+    bot_id: str = ""
+    bot_type: str = "bot_user"
+
+
+class DChatConfig(Base):
+    """DChat channel configuration using HTTP webhook + outbound push API."""
+
+    enabled: bool = False
+    webhook_path: str = "/dchat"
+    placeholder_text: str = "正在思考中，请稍候..."
+    dm: DChatDMConfig = Field(default_factory=DChatDMConfig)
+    outbound: DChatOutboundConfig = Field(default_factory=DChatOutboundConfig)
+
+
 class QQConfig(Base):
     """QQ channel configuration using botpy SDK."""
 
@@ -214,6 +241,7 @@ class ChannelsConfig(Base):
     dingtalk: DingTalkConfig = Field(default_factory=DingTalkConfig)
     email: EmailConfig = Field(default_factory=EmailConfig)
     slack: SlackConfig = Field(default_factory=SlackConfig)
+    dchat: DChatConfig = Field(default_factory=DChatConfig)
     qq: QQConfig = Field(default_factory=QQConfig)
     matrix: MatrixConfig = Field(default_factory=MatrixConfig)
 

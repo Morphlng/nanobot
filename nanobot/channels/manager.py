@@ -126,6 +126,21 @@ class ChannelManager:
             except ImportError as e:
                 logger.warning("Slack channel not available: {}", e)
 
+        # DChat channel
+        if self.config.channels.dchat.enabled:
+            try:
+                from nanobot.channels.dchat import DChatChannel
+
+                self.channels["dchat"] = DChatChannel(
+                    self.config.channels.dchat,
+                    self.bus,
+                    listen_host=self.config.gateway.host,
+                    listen_port=self.config.gateway.port,
+                )
+                logger.info("DChat channel enabled")
+            except ImportError as e:
+                logger.warning("DChat channel not available: {}", e)
+
         # QQ channel
         if self.config.channels.qq.enabled:
             try:

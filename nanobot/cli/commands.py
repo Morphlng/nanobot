@@ -309,7 +309,8 @@ def gateway(
         import logging
         logging.basicConfig(level=logging.DEBUG)
 
-    config = _load_runtime_config(config, workspace)
+    config: Config = _load_runtime_config(config, workspace)
+    config.gateway.port = port
 
     console.print(f"{__logo__} Starting nanobot gateway on port {port}...")
     sync_workspace_templates(config.workspace_path)
@@ -727,6 +728,15 @@ def channels_status():
         "Slack",
         "✓" if slack.enabled else "✗",
         slack_config
+    )
+
+    # DChat
+    dchat = config.channels.dchat
+    dchat_config = dchat.outbound.url or "[dim]not configured[/dim]"
+    table.add_row(
+        "DChat",
+        "✓" if dchat.enabled else "✗",
+        dchat_config
     )
 
     # DingTalk
