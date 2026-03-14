@@ -10,19 +10,47 @@ import threading
 import time
 from collections import deque
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
-from typing import Any
+from typing import Any, Literal
 
 import httpx
 from loguru import logger
+from pydantic import Field
 
 from nanobot.bus.events import OutboundMessage
 from nanobot.bus.queue import MessageBus
 from nanobot.channels.base import BaseChannel
-from nanobot.config.schema import DChatConfig
+from nanobot.config.schema import Base, DChatConfig
 
 MAX_PAYLOAD_BYTES = 512 * 1024
 DEDUP_TTL_SECONDS = 10 * 60
 DEDUP_MAX_KEYS = 2000
+
+
+class DChatDMConfig(Base):
+    """DChat DM policy configuration."""
+
+    policy: Literal["open", "allowlist", "disabled"] = "open"
+    allow_from: list[str] = Field(default_factory=list)
+
+
+class DChatOutboundConfig(Base):
+    """DChat outbound API configuration."""
+
+    url: str = ""
+    username: str = ""
+    password: str = ""
+    bot_id: str = ""
+    bot_type: str = "bot_user"
+
+
+class DChatConfig(Base):
+    """DChat channel configuration using HTTP webhook + outbound push API."""
+
+    enabled: bool = False
+    webhook_path: str = "/dchat"
+    placeholder_text: str = "正在思考中，请稍候..."
+    dm: DChatDMConfig = Field(default_factory=DChatDMConfig)
+    outbound: DChatOutboundConfig = Field(default_factory=DChatOutboundConfig)
 
 
 class DChatChannel(BaseChannel):
@@ -179,7 +207,9 @@ class DChatChannel(BaseChannel):
     def _start_webhook_server(self) -> bool:
         handler_cls = self._build_handler()
         try:
-            server = ThreadingHTTPServer((self._listen_host, self._listen_port), handler_cls)
+            server = ThreadingHTTPServer(
+                (self._listen_host, self._listen_port), handler_cls
+            )
             server.daemon_threads = True
         except OSError as e:
             logger.error(
@@ -222,7 +252,9 @@ class DChatChannel(BaseChannel):
         return DChatWebhookHandler
 
     @staticmethod
-    def _write_json(handler: BaseHTTPRequestHandler, status: int, payload: dict[str, Any]) -> None:
+    def _write_json(
+        handler: BaseHTTPRequestHandler, status: int, payload: dict[str, Any]
+    ) -> None:
         body = json.dumps(payload, ensure_ascii=False).encode("utf-8")
         handler.send_response(status)
         handler.send_header("Content-Type", "application/json; charset=utf-8")
@@ -280,7 +312,9 @@ class DChatChannel(BaseChannel):
         sender_id = str(payload.get("user_id", "")).strip()
         text = str(payload.get("text", "")).strip()
         if not sender_id or not text:
-            self._write_json(handler, 400, {"error": "Missing required fields: user_id, text"})
+            self._write_json(
+                handler, 400, {"error": "Missing required fields: user_id, text"}
+            )
             return
 
         self._write_json(handler, 200, {"text": self.config.placeholder_text})
@@ -291,7 +325,9 @@ class DChatChannel(BaseChannel):
             logger.warning("DChat channel is not running; dropping inbound payload")
             return
         try:
-            fut = asyncio.run_coroutine_threadsafe(self._process_inbound(payload), self._loop)
+            fut = asyncio.run_coroutine_threadsafe(
+                self._process_inbound(payload), self._loop
+            )
             fut.add_done_callback(self._log_inbound_future)
         except Exception as e:
             logger.error("Failed to schedule DChat inbound processing: {}", e)
@@ -353,7 +389,9 @@ class DChatChannel(BaseChannel):
         if policy == "allowlist":
             allowed = "*" in allow_from or sender_id in allow_from
             if not allowed:
-                await self._push_text(sender_id, "You are not authorized to use this channel.")
+                await self._push_text(
+                    sender_id, "You are not authorized to use this channel."
+                )
                 return
 
         await self._handle_message(
