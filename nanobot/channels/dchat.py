@@ -19,7 +19,7 @@ from pydantic import Field
 from nanobot.bus.events import OutboundMessage
 from nanobot.bus.queue import MessageBus
 from nanobot.channels.base import BaseChannel
-from nanobot.config.schema import Base, DChatConfig
+from nanobot.config.schema import Base
 
 MAX_PAYLOAD_BYTES = 512 * 1024
 DEDUP_TTL_SECONDS = 10 * 60
@@ -57,16 +57,23 @@ class DChatChannel(BaseChannel):
     """DChat channel implemented with webhook callbacks and outbound HTTP push."""
 
     name = "dchat"
+    display_name = "DChat"
     _MENTION_RE = re.compile(r"@<=#\d+=>\s*")
+
+    @classmethod
+    def default_config(cls) -> dict[str, Any]:
+        return DChatConfig().model_dump(by_alias=True)
 
     def __init__(
         self,
-        config: DChatConfig,
+        config: Any,
         bus: MessageBus,
         *,
         listen_host: str = "0.0.0.0",
         listen_port: int = 18790,
     ):
+        if isinstance(config, dict):
+            config = DChatConfig.model_validate(config)
         super().__init__(config, bus)
         self.config: DChatConfig = config
         self._listen_host = listen_host

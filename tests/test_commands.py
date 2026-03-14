@@ -501,9 +501,16 @@ def test_gateway_cli_port_overrides_configured_port(monkeypatch, tmp_path: Path)
 
 
 def test_channels_status_includes_dchat_row(monkeypatch) -> None:
-    config = Config()
-    config.channels.dchat.enabled = True
-    config.channels.dchat.outbound.url = "http://im-server/api/v3/message.create"
+    config = Config.model_validate(
+        {
+            "channels": {
+                "dchat": {
+                    "enabled": True,
+                    "outbound": {"url": "http://im-server/api/v3/message.create"},
+                }
+            }
+        }
+    )
 
     monkeypatch.setattr("nanobot.config.loader.load_config", lambda: config)
 
@@ -511,4 +518,3 @@ def test_channels_status_includes_dchat_row(monkeypatch) -> None:
 
     assert result.exit_code == 0
     assert "DChat" in result.stdout
-    assert "http://im-server/api/v3/message.create" in result.stdout

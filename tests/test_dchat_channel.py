@@ -8,9 +8,9 @@ import pytest
 
 from nanobot.bus.events import OutboundMessage
 from nanobot.bus.queue import MessageBus
-from nanobot.channels.dchat import DChatChannel
+from nanobot.channels.dchat import DChatChannel, DChatConfig
 from nanobot.channels.manager import ChannelManager
-from nanobot.config.schema import Config, DChatConfig
+from nanobot.config.schema import Config
 
 
 def _free_port() -> int:
@@ -60,39 +60,45 @@ def _build_payload(**overrides):
 
 
 def test_dchat_config_defaults() -> None:
-    cfg = Config()
-    assert cfg.channels.dchat.webhook_path == "/dchat"
-    assert cfg.channels.dchat.dm.policy == "open"
-    assert cfg.channels.dchat.placeholder_text == "正在思考中，请稍候..."
+    cfg = DChatConfig()
+    assert cfg.webhook_path == "/dchat"
+    assert cfg.dm.policy == "open"
+    assert cfg.placeholder_text == "正在思考中，请稍候..."
 
 
 def test_dchat_config_camel_case_deserialization() -> None:
-    cfg = Config.model_validate(
+    cfg = DChatConfig.model_validate(
         {
-            "channels": {
-                "dchat": {
-                    "enabled": True,
-                    "webhookPath": "/hook",
-                    "placeholderText": "thinking",
-                    "dm": {"policy": "allowlist", "allowFrom": ["u1"]},
-                    "outbound": {
-                        "url": "http://example.com/api",
-                        "username": "app",
-                        "password": "secret",
-                        "botId": "42",
-                        "botType": "bot_user",
-                    },
-                }
-            }
+            "enabled": True,
+            "webhookPath": "/hook",
+            "placeholderText": "thinking",
+            "dm": {"policy": "allowlist", "allowFrom": ["u1"]},
+            "outbound": {
+                "url": "http://example.com/api",
+                "username": "app",
+                "password": "secret",
+                "botId": "42",
+                "botType": "bot_user",
+            },
         }
     )
 
-    assert cfg.channels.dchat.enabled is True
-    assert cfg.channels.dchat.webhook_path == "/hook"
-    assert cfg.channels.dchat.placeholder_text == "thinking"
-    assert cfg.channels.dchat.dm.policy == "allowlist"
-    assert cfg.channels.dchat.dm.allow_from == ["u1"]
-    assert cfg.channels.dchat.outbound.bot_id == "42"
+    assert cfg.enabled is True
+    assert cfg.webhook_path == "/hook"
+    assert cfg.placeholder_text == "thinking"
+    assert cfg.dm.policy == "allowlist"
+    assert cfg.dm.allow_from == ["u1"]
+    assert cfg.outbound.bot_id == "42"
+
+
+def test_dchat_default_config_for_onboard() -> None:
+    cfg = DChatChannel.default_config()
+    assert isinstance(cfg, dict)
+    assert cfg["enabled"] is False
+    assert cfg["webhookPath"] == "/dchat"
+    assert cfg["placeholderText"] == "正在思考中，请稍候..."
+    assert cfg["dm"]["policy"] == "open"
+    assert cfg["outbound"]["url"] == ""
 
 
 @pytest.mark.asyncio
@@ -134,7 +140,9 @@ async def test_dchat_allowlist_denied_sends_unauthorized_and_skips_inbound() -> 
 
     try:
         async with httpx.AsyncClient(timeout=3.0) as client:
-            resp = await client.post(f"http://127.0.0.1:{port}/dchat", json=_build_payload())
+            resp = await client.post(
+                f"http://127.0.0.1:{port}/dchat", json=_build_payload()
+            )
         assert resp.status_code == 200
         await asyncio.sleep(0.1)
 
@@ -158,11 +166,15 @@ async def test_dchat_disabled_policy_sends_disabled_and_skips_inbound() -> None:
 
     try:
         async with httpx.AsyncClient(timeout=3.0) as client:
-            resp = await client.post(f"http://127.0.0.1:{port}/dchat", json=_build_payload())
+            resp = await client.post(
+                f"http://127.0.0.1:{port}/dchat", json=_build_payload()
+            )
         assert resp.status_code == 200
         await asyncio.sleep(0.1)
 
-        channel._push_text.assert_awaited_once_with("user-1", "This channel is currently disabled.")
+        channel._push_text.assert_awaited_once_with(
+            "user-1", "This channel is currently disabled."
+        )
         assert bus.inbound_size == 0
     finally:
         await _stop_channel(channel, task)
@@ -235,10 +247,17 @@ async def test_dchat_message_key_dedup() -> None:
 
 
 def test_channel_manager_registers_dchat_with_gateway_binding() -> None:
-    cfg = Config()
-    cfg.channels.dchat.enabled = True
-    cfg.gateway.host = "127.0.0.1"
-    cfg.gateway.port = 18888
+    cfg = Config.model_validate(
+        {
+            "channels": {
+                "dchat": {
+                    "enabled": True,
+                    "outbound": {"url": "http://im-server/api/v3/message.create"},
+                }
+            },
+            "gateway": {"host": "127.0.0.1", "port": 18888},
+        }
+    )
 
     manager = ChannelManager(cfg, MessageBus())
     channel = manager.get_channel("dchat")
